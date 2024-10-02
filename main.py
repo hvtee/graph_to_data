@@ -9,12 +9,18 @@ image = cv2.imread('graphs/CoFe2O4.png')
 # Преобразуем изображение в цветовое пространство HSV
 hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
+plt.imshow(hsv_image)
+plt.show()
+
 # Установим границы для черного цвета (черная линия гистерезиса)
 lower_black = np.array([0, 0, 0])
 upper_black = np.array([180, 255, 50])
 
 # Создаем маску для выделения только черных пикселей (линия гистерезиса)
 black_mask = cv2.inRange(hsv_image, lower_black, upper_black)
+
+plt.imshow(black_mask)
+plt.show()
 
 # Убираем мелкие объекты (подписи и текст) с помощью морфологических операций
 kernel = np.ones((5, 5), np.uint8)
