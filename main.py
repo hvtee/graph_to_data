@@ -1,3 +1,4 @@
+import time
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
@@ -7,7 +8,6 @@ import pandas as pd
 def extract_hysteresis_loop(image_path):
     image = cv2.imread(image_path)
 
-    # Преобразуем изображение из BGR в HSV для удобного выделения красного цвета
     hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
     plt.imshow(hsv_image)
@@ -20,7 +20,6 @@ def extract_hysteresis_loop(image_path):
     lower_red2 = np.array([170, 25, 20])
     upper_red2 = np.array([180, 255, 255])
 
-    # Маска для выделения красных частей изображения
     mask1 = cv2.inRange(hsv_image, lower_red1, upper_red1)
     mask2 = cv2.inRange(hsv_image, lower_red2, upper_red2)
     mask = cv2.bitwise_or(mask1, mask2)
@@ -29,7 +28,6 @@ def extract_hysteresis_loop(image_path):
     print("mask")
     plt.show()
 
-    # Применяем маску к изображению
     red_only_image = cv2.bitwise_and(image, image, mask=mask)
 
     plt.imshow(red_only_image)
@@ -53,7 +51,7 @@ def extract_hysteresis_loop(image_path):
 def pixel_to_real_coordinates(pixel_coords, x_range, y_range, img_shape):
     height, width = img_shape[:2]
     real_coords = []
-    sorted_real_coords = []
+    # sorted_real_coords = []
 
     x_min, x_max = x_range
     y_min, y_max = y_range
@@ -78,7 +76,6 @@ def calculate_hysteresis_loop_params(image_path, x_range, y_range):
     contours, image = extract_hysteresis_loop(image_path)
 
     if contours:
-        # Выбираем самый крупный контур
         largest_contour = max(contours, key=cv2.contourArea)
 
         real_coords = pixel_to_real_coordinates(largest_contour, x_range, y_range, image.shape)
@@ -93,10 +90,10 @@ def calculate_hysteresis_loop_params(image_path, x_range, y_range):
         height = y_max - y_min
         area = cv2.contourArea(largest_contour)
 
-        print(f"Параметры петли гистерезиса:")
-        print(f"Ширина: {width}")
-        print(f"Высота: {height}")
-        print(f"Площадь (в пикселях): {area}")
+        print(f"PARAMS:")
+        print(f"Width: {width}")
+        print(f"Height: {height}")
+        print(f"Area (pix): {area}")
 
         fig, ax = plt.subplots(1, 2, figsize=(12, 6))
 
@@ -117,38 +114,73 @@ def calculate_hysteresis_loop_params(image_path, x_range, y_range):
         print("Петля гистерезиса не найдена!")
 
 
-def save_to_excel(data, diff_data, file_path='data/hysteresis_loop.xlsx'):
-    df = pd.DataFrame({
-        'X': [x for x, y in data],
-        'Y': [y for x, y in data],
-        'ΔY': [delta_y for x, delta_y in diff_data]
-    })
-
-    df.to_excel(file_path, index=False)
-    print(f"Данные успешно сохранены в файл: {file_path}")
-
-
 def diff_coords(coords, max_y):
     return [(x, (y - max_y) / max_y) for x, y in coords]
 
 
+def recalculate_h(coords):
+    return [(1 / x, y) for x, y in coords]
+
+
+def save_to_excel(data, diff_data, inv_h_data, file_path='data/hysteresis-loop-', img_name=""):
+    df = pd.DataFrame({
+        'H': [x for x, y in data],
+        'M': [y for x, y in data],
+        'δM': [delta_y for x, delta_y in diff_data],
+        '1/H': [inv_h for inv_h, y in inv_h_data]
+    })
+    time_string = time.strftime("%d.%m.%Y-%H.%M.%S")
+    file_path = file_path + f"{time_string}" + ".xlsx"
+    df.to_excel(file_path, index=False)
+    print(f"Data saved into: {file_path}")
+
+
 def main():
-    # Пример вызова с указанием диапазонов осей и цены деления
-    image_path = 'graphs/CoFe2O4_5.png'  # Замените на ваш путь к изображению
-    x_range = (-40, 60)  # Пример диапазона значений по оси X
-    y_range = (-60, 60)  # Пример диапазона значений по оси Y
+    image_path = 'graphs/loop_2.png'
+    image_name = image_path
+    x_range = (-40, 40)
+    y_range = (-80, 80)
 
     coords = calculate_hysteresis_loop_params(image_path, x_range, y_range)
+    sorted_coords = sorted(np.asarray(coords).tolist(), key=lambda coord: coord[0])
+    max_y = sorted_coords[-1][1]
+    min_y = sorted_coords[0][1]
+    # max_y = max(coords, key=lambda coord: coord[1])[1]
+    # min_y = min(coords, key=lambda coord: coord[1])[1]
 
-    max_y = max(coords, key=lambda coord: coord[1])[1]
-    print(f"Максимальное значение y: {max_y}")
+    Mr = None
+    for x, y in coords:
+        if x == 0:
+            Mr = y
+            break
+
+    Hc = None
+    for x, y in coords:
+        if round(y) == 0:
+            Hc = x
+            break
+
+    print(f"Ms: {max_y}")
+    print(f"Mmin: {min_y}")
+    if Mr:
+        print(f"Mr: {Mr}")
+    if Hc:
+        print(f"Hc: {Hc}")
 
     d_coords = diff_coords(coords, max_y)
-    plt.imshow(d_coords, cmap='gray')
+    x = [i[0] for i in d_coords]
+    y = [i[1] for i in d_coords]
+    plt.plot(x, y, lw=2)
+    plt.show()
+
+    inv_h_coords = recalculate_h(coords)
+    x = [i[0] for i in inv_h_coords]
+    y = [i[1] for i in inv_h_coords]
+    plt.plot(x, y, lw=2)
     plt.show()
 
     if coords is not None:
-        save_to_excel(coords, d_coords)
+        save_to_excel(coords, d_coords, inv_h_coords)
 
 
 if __name__ == '__main__':
