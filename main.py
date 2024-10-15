@@ -3,49 +3,45 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+from openpyxl.styles import Alignment
+from scipy.interpolate import CubicSpline
 
 
-def extract_hysteresis_loop(image_path):
+def extract_curve(image_path):
     image = cv2.imread(image_path)
-
     hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-    plt.imshow(hsv_image)
-    print("hsv_image")
-    plt.show()
-
-    lower_red1 = np.array([0, 50, 20])
-    upper_red1 = np.array([5, 255, 255])
-
-    lower_red2 = np.array([170, 25, 20])
-    upper_red2 = np.array([180, 255, 255])
-
-    mask1 = cv2.inRange(hsv_image, lower_red1, upper_red1)
-    mask2 = cv2.inRange(hsv_image, lower_red2, upper_red2)
-    mask = cv2.bitwise_or(mask1, mask2)
-
-    plt.imshow(mask)
-    print("mask")
-    plt.show()
-
-    red_only_image = cv2.bitwise_and(image, image, mask=mask)
-
+    red_border_low_1 = np.array([0, 50, 20])
+    red_border_high_1 = np.array([5, 255, 255])
+    red_border_low_2 = np.array([170, 25, 20])
+    red_border_high_2 = np.array([180, 255, 255])
+    red_mask_1 = cv2.inRange(hsv_image, red_border_low_1, red_border_high_1)
+    red_mask_2 = cv2.inRange(hsv_image, red_border_low_2, red_border_high_2)
+    red_mask_result = cv2.bitwise_or(red_mask_1, red_mask_2)
+    red_only_image = cv2.bitwise_and(image, image, mask=red_mask_result)
     plt.imshow(red_only_image)
-    print("red_only_image")
     plt.show()
 
-    # Преобразуем в grayscale и находим контуры
-    gray_image = cv2.cvtColor(red_only_image, cv2.COLOR_BGR2GRAY)
-    _, thresh_image = cv2.threshold(gray_image, 30, 255, cv2.THRESH_BINARY)
-
-    plt.imshow(gray_image)
-    print("gray_image")
+    green_border_low = np.array([35, 25, 25])
+    green_border_high = np.array([85, 255, 255])
+    green_mask = cv2.inRange(hsv_image, green_border_low, green_border_high)
+    green_only_image = cv2.bitwise_and(image, image, mask=green_mask)
+    plt.imshow(green_only_image)
     plt.show()
 
-    # Находим контуры на бинаризованном изображении
-    contours, _ = cv2.findContours(thresh_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    red_gray_image = cv2.cvtColor(red_only_image, cv2.COLOR_BGR2GRAY)
+    _, red_thresh_image = cv2.threshold(red_gray_image, 30, 255, cv2.THRESH_BINARY)
+    red_contours, _ = cv2.findContours(red_thresh_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    plt.imshow(red_gray_image)
+    plt.show()
 
-    return contours, image
+    green_gray_image = cv2.cvtColor(green_only_image, cv2.COLOR_BGR2GRAY)
+    _, green_thresh_image = cv2.threshold(green_gray_image, 30, 255, cv2.THRESH_BINARY)
+    green_contours, _ = cv2.findContours(green_thresh_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    plt.imshow(green_gray_image)
+    plt.show()
+
+    return red_contours, green_contours, image
 
 
 def pixel_to_real_coordinates(pixel_coords, x_range, y_range, img_shape):
@@ -72,49 +68,72 @@ def pixel_to_real_coordinates(pixel_coords, x_range, y_range, img_shape):
     return np.array(real_coords)
 
 
-def calculate_hysteresis_loop_params(image_path, x_range, y_range):
-    contours, image = extract_hysteresis_loop(image_path)
+def evaluate_curve(image_path, x_range, y_range):
+    red_contours, green_contours, image = extract_curve(image_path)
 
-    if contours:
-        largest_contour = max(contours, key=cv2.contourArea)
+    if red_contours:
+        red_contour = max(red_contours, key=cv2.contourArea)
+        green_contour = max(green_contours, key=cv2.contourArea)
 
-        real_coords = pixel_to_real_coordinates(largest_contour, x_range, y_range, image.shape)
+        red_real_coords = pixel_to_real_coordinates(red_contour, x_range, y_range, image.shape)
+        green_real_coords = pixel_to_real_coordinates(green_contour, x_range, y_range, image.shape)
 
-        x_values = real_coords[:, 0]
-        y_values = real_coords[:, 1]
+        red_x_values = red_real_coords[:, 0]
+        red_y_values = red_real_coords[:, 1]
 
-        x_min, x_max = x_values.min(), x_values.max()
-        y_min, y_max = y_values.min(), y_values.max()
+        green_x_values = green_real_coords[:, 0]
+        green_y_values = green_real_coords[:, 1]
 
-        width = x_max - x_min
-        height = y_max - y_min
-        area = cv2.contourArea(largest_contour)
+        red_x_min, red_x_max = red_x_values.min(), red_x_values.max()
+        red_y_min, red_y_max = red_y_values.min(), red_y_values.max()
 
-        print(f"PARAMS:")
-        print(f"Width: {width}")
-        print(f"Height: {height}")
-        print(f"Area (pix): {area}")
-
-        fig, ax = plt.subplots(1, 2, figsize=(12, 6))
-
-        ax[0].imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-        ax[0].set_title('Исходное изображение')
-        ax[0].axis('off')
-
-        ax[1].plot(real_coords[:, 0], real_coords[:, 1], lw=2)
-        ax[1].set_title('График петли гистерезиса')
-        ax[1].set_xlabel('X')
-        ax[1].set_ylabel('Y')
-        ax[1].grid(True)
-
-        plt.tight_layout()
-        plt.show()
-        return real_coords
+        return red_real_coords, green_real_coords
     else:
-        print("Петля гистерезиса не найдена!")
+        print("No curve found!")
 
 
-def diff_coords(coords, max_y):
+def average_curve(coords):
+    coord_dict = {}
+    new_coords = []
+
+    for x, y in coords:
+        if x not in coord_dict:
+            coord_dict[x] = []
+        coord_dict[x].append(y)
+
+    for x, y_values in coord_dict.items():
+        avg_y = sum(y_values) / len(y_values)
+        new_coords.append([x, avg_y])
+
+    return new_coords
+
+
+def fit_polynomial(coords, degree=3):
+    # Разбиваем координаты на x и y
+    x_vals = [x for x, y in coords]
+    y_vals = [y for x, y in coords]
+
+    # Получаем коэффициенты полинома
+    poly_coeffs = np.polyfit(x_vals, y_vals, degree)
+
+    # Возвращаем функцию полинома
+    poly_func = np.poly1d(poly_coeffs)
+
+    return poly_func
+
+
+def fit_spline(coords):
+    # Разбиваем координаты на x и y
+    x_vals = [x for x, y in coords]
+    y_vals = [y for x, y in coords]
+
+    # Создаем сплайн-интерполяцию
+    spline_func = CubicSpline(x_vals, y_vals)
+
+    return spline_func
+
+
+def div_coords(coords, max_y):
     return [(x, (y - max_y) / max_y) for x, y in coords]
 
 
@@ -122,65 +141,138 @@ def recalculate_h(coords):
     return [(1 / x, y) for x, y in coords]
 
 
-def save_to_excel(data, diff_data, inv_h_data, file_path='data/hysteresis-loop-', img_name=""):
-    df = pd.DataFrame({
-        'H': [x for x, y in data],
-        'M': [y for x, y in data],
-        'δM': [delta_y for x, delta_y in diff_data],
+def save_to_excel(red_data, green_data, div_data, inv_h_data, other_data, file_path='data/hysteresis-loop-',
+                  img_name=""):
+    df_red = pd.DataFrame({
+        'H': [x for x, y in red_data],
+        'M': [y for x, y in red_data],
+        'δM': [delta_y for x, delta_y in div_data],
         '1/H': [inv_h for inv_h, y in inv_h_data]
     })
+
+    df_green = pd.DataFrame({
+        'H': [x for x, y in green_data],
+        'M': [y for x, y in green_data]
+    })
+
     time_string = time.strftime("%d.%m.%Y-%H.%M.%S")
     file_path = file_path + f"{time_string}" + ".xlsx"
-    df.to_excel(file_path, index=False)
+
+    with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
+        df_combined = pd.concat([df_red, df_green], axis=1)
+        df_combined.to_excel(writer, sheet_name='Data', startrow=2, index=False)
+
+        workbook = writer.book
+        worksheet = writer.sheets['Data']
+
+        worksheet.merge_cells('A1:D1')
+        worksheet['A1'] = 'Main'
+        worksheet['A1'].alignment = Alignment(horizontal='center')
+
+        worksheet.merge_cells('E1:F1')
+        worksheet['E1'] = 'Secondary'
+        worksheet['E1'].alignment = Alignment(horizontal='center')
+
+        params_ws = workbook.create_sheet(title="Parameters")
+        params_ws.append(["Parameter", "Value"])
+
+        # Параметры, такие как Ms, Hc
+        param_names = ['Ms', 'Mr', 'Hc']
+        for name, value in zip(param_names, other_data):
+            params_ws.append([name, value])
+
     print(f"Data saved into: {file_path}")
 
 
 def main():
-    image_path = 'graphs/loop_2.png'
+    image_path = 'graphs/loop_3.jpg'
+    image = cv2.imread(image_path)
     image_name = image_path
     x_range = (-40, 40)
     y_range = (-80, 80)
 
-    coords = calculate_hysteresis_loop_params(image_path, x_range, y_range)
-    sorted_coords = sorted(np.asarray(coords).tolist(), key=lambda coord: coord[0])
-    max_y = sorted_coords[-1][1]
-    min_y = sorted_coords[0][1]
+    red_coords, green_coords = evaluate_curve(image_path, x_range, y_range)
+    red_sorted_coords = sorted(np.asarray(red_coords).tolist(), key=lambda coord: coord[0])
+    green_sorted_coords = sorted(np.asarray(green_coords).tolist(), key=lambda coord: coord[0])
+    red_average_coords = average_curve(red_sorted_coords)
+    green_average_coords = average_curve(green_sorted_coords)
+    print("red_average_coords")
+    print(red_sorted_coords)
+    print("green_average_coords")
+    print(green_average_coords)
+
+    fig, ax = plt.subplots(1, 3, figsize=(12, 6))
+
+    ax[0].imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+    ax[0].set_title('Source graph:')
+    ax[0].axis('off')
+    ax[1].plot(red_average_coords[0], red_average_coords[1], lw=2)
+    ax[1].set_title('Rebuilt graph (main)')
+    ax[1].set_xlabel('H, kOe')
+    ax[1].set_ylabel('M, emu/g')
+    ax[1].grid(True)
+    ax[2].plot(green_average_coords[0], green_average_coords[1], lw=2)
+    ax[2].set_title('Rebuilt graph (secondary)')
+    ax[2].set_xlabel('H, kOe')
+    ax[2].set_ylabel('M, emu/g')
+    ax[2].grid(True)
+    plt.tight_layout()
+    plt.show()
+
+    print(f"PARAMS:")
+
+    params = []
+    Ms = red_average_coords[-1][1]
+    min_y = red_average_coords[0][1]
+
     # max_y = max(coords, key=lambda coord: coord[1])[1]
     # min_y = min(coords, key=lambda coord: coord[1])[1]
 
     Mr = None
-    for x, y in coords:
-        if x == 0:
+    for x, y in red_coords:
+        if round(x) == 0:
             Mr = y
             break
 
     Hc = None
-    for x, y in coords:
+    for x, y in red_coords:
         if round(y) == 0:
             Hc = x
             break
 
-    print(f"Ms: {max_y}")
-    print(f"Mmin: {min_y}")
+    params.append(Ms)
+    params.append(abs(Mr))
+    params.append(abs(Hc))
+
+    print(f"Ms: {Ms}")
+    print(f"Msmin: {min_y}")
     if Mr:
         print(f"Mr: {Mr}")
     if Hc:
         print(f"Hc: {Hc}")
 
-    d_coords = diff_coords(coords, max_y)
+    d_coords = div_coords(red_average_coords, Ms)
     x = [i[0] for i in d_coords]
     y = [i[1] for i in d_coords]
     plt.plot(x, y, lw=2)
+    plt.title('Rebuilt graph (secondary)')
+    plt.xlabel('H, kOe')
+    plt.ylabel('M, emu/g')
+    plt.grid(True)
     plt.show()
 
-    inv_h_coords = recalculate_h(coords)
+    inv_h_coords = recalculate_h(red_average_coords)
     x = [i[0] for i in inv_h_coords]
     y = [i[1] for i in inv_h_coords]
     plt.plot(x, y, lw=2)
+    plt.title('Rebuilt graph (secondary)')
+    plt.xlabel('H, kOe')
+    plt.ylabel('M, emu/g')
+    plt.grid(True)
     plt.show()
 
-    if coords is not None:
-        save_to_excel(coords, d_coords, inv_h_coords)
+    if red_average_coords and green_average_coords is not None:
+        save_to_excel(red_average_coords, green_average_coords, d_coords, inv_h_coords, params)
 
 
 if __name__ == '__main__':
