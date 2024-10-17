@@ -22,6 +22,7 @@ class Add_Graph_Window(QWidget):
         self.general_layout.setObjectName(u"general_layout")
         self.general_layout.setContentsMargins(0, 0, 0, 0)
         self.add_graph_button = QPushButton(self.widget)
+        self.graph_button_text = ""
         self.add_graph_button.setObjectName(u"add_graph_button")
 
         self.general_layout.addWidget(self.add_graph_button)
@@ -123,9 +124,10 @@ class Add_Graph_Window(QWidget):
 
     def open_file_dialog(self):
         try:
-            file_path, _ = QFileDialog.getOpenFileName(self, "Choose file", "", "All Files (*)")
+            file_path, _ = QFileDialog.getOpenFileName(self, "Choose file", "graphs", "All Files (*)")
             if file_path:
                 self.add_graph_button.setText(os.path.basename(file_path))
+                self.graph_button_text = file_path
         except Exception as e:
             self.main_window.log_message(f"Error while choosing file: {e}")
 
@@ -135,7 +137,7 @@ class Add_Graph_Window(QWidget):
             max_x = self.max_x_line_edit.text()
             min_y = self.min_y_line_edit.text()
             max_y = self.max_y_line_edit.text()
-            file_path = self.add_graph_button.text()
+            file_path = self.graph_button_text
 
             if not (min_x and max_x and min_y and max_y and file_path != "Add graph"):
                 QMessageBox.warning(self, "Error", "All spaces should be filled!")

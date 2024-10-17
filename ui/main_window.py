@@ -96,91 +96,146 @@ class Main_Window(QMainWindow):
 
     def analyse_data(self):
         try:
-            print(self.graph_data)
-            image_path = 'graphs/loop_3.jpg'
-            image = cv2.imread(image_path)
-            image_name = os.path.basename(image_path)
-            x_range = (-40, 40)
-            y_range = (-80, 80)
+            if len(self.graph_data) == 0:
+                self.log_message("Graphs not chosen!")
+                return
 
-            red_coords, green_coords = evaluate_curve(image_path, x_range, y_range)
-            red_sorted_coords = sorted(np.asarray(red_coords).tolist(), key=lambda coord: coord[0])
-            green_sorted_coords = sorted(np.asarray(green_coords).tolist(), key=lambda coord: coord[0])
-            red_average_coords = average_curve(red_sorted_coords)
-            green_average_coords = average_curve(green_sorted_coords)
+            for graph in self.graph_data:
+                image_path = "graphs/" + os.path.basename(graph['file_path'])
+                min_x = graph['min_x']
+                max_x = graph['max_x']
+                min_y = graph['min_y']
+                max_y = graph['max_y']
 
-            fig, ax = plt.subplots(1, 3, figsize=(12, 6))
+                image = cv2.imread(image_path)
+                image_name = os.path.basename(image_path)
+                x_range = (min_x, max_x)
+                y_range = (min_y, max_y)
 
-            ax[0].imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-            ax[0].set_title('Source graph:')
-            ax[0].axis('off')
-            ax[1].plot(red_average_coords[0], red_average_coords[1], lw=2)
-            ax[1].set_title('Rebuilt graph (main)')
-            ax[1].set_xlabel('H, kOe')
-            ax[1].set_ylabel('M, emu/g')
-            ax[1].grid(True)
-            ax[2].plot(green_average_coords[0], green_average_coords[1], lw=2)
-            ax[2].set_title('Rebuilt graph (secondary)')
-            ax[2].set_xlabel('H, kOe')
-            ax[2].set_ylabel('M, emu/g')
-            ax[2].grid(True)
-            plt.tight_layout()
-            plt.show()
+                red_coords, green_coords = evaluate_curve(image_path, x_range, y_range)
+                red_sorted_coords = sorted(np.asarray(red_coords).tolist(), key=lambda coord: coord[0])
+                green_sorted_coords = sorted(np.asarray(green_coords).tolist(), key=lambda coord: coord[0])
+                red_average_coords = average_curve(red_sorted_coords)
+                green_average_coords = average_curve(green_sorted_coords)
 
-            print(f"PARAMS:")
+                # Plotting the original graph and the combined curves
+                fig, ax = plt.subplots(1, 2, figsize=(12, 6))
 
-            params = []
-            Ms = red_average_coords[-1][1]
-            Msmin = red_average_coords[0][1]
+                # Original Image
+                ax[0].imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+                ax[0].set_title('Source Graph:')
+                ax[0].axis('off')
 
-            # max_y = max(coords, key=lambda coord: coord[1])[1]
-            # min_y = min(coords, key=lambda coord: coord[1])[1]
+                # Combined Curves
+                x = [i[0] for i in red_average_coords]
+                y = [i[1] for i in red_average_coords]
+                ax[1].plot(x, y, color='red', lw=2, label='Main Curve')
+                x = [i[0] for i in green_average_coords]
+                y = [i[1] for i in green_average_coords]
+                ax[1].plot(x, y, color='green', lw=2, label='Secondary Curve')
+                ax[1].set_title('Extracted hysteresis loop')
+                ax[1].set_xlabel('H, kOe')
+                ax[1].set_ylabel('M, emu/g')
+                ax[1].grid(True)
+                ax[1].legend()
 
-            Mr_point = find_closest_point(red_coords, target_x=0)
-            Mr = Mr_point[1]
+                plt.tight_layout()
+                plt.show()
 
-            Hc_point = find_closest_point(red_coords, target_y=0)
-            Hc = Hc_point[0]
+                print(f"PARAMS:")
 
-            curve_square = evaluate_square(red_average_coords, green_average_coords)
+                params = []
+                Ms = red_average_coords[-1][1]
+                Msmin = red_average_coords[0][1]
 
-            params.append(Ms)
-            params.append(abs(Mr))
-            params.append(abs(Hc))
-            params.append(curve_square)
+                red_Mr_point = find_closest_point(red_average_coords, target_x=0)
+                red_Mr = abs(red_Mr_point[1])
+                green_Mr_point = find_closest_point(green_average_coords, target_x=0)
+                green_Mr = abs(green_Mr_point[1])
 
-            print(f"Ms: {Ms}")
-            print(f"Msmin: {Msmin}")
-            if Mr:
-                print(f"Mr: {Mr}")
-            if Hc:
-                print(f"Hc: {Hc}")
-            print(f"Square:{curve_square}")
+                red_Hc_point = find_closest_point(red_average_coords, target_y=0)
+                red_Hc = abs(red_Hc_point[0])
+                green_Hc_point = find_closest_point(green_average_coords, target_y=0)
+                green_Hc = abs(green_Hc_point[0])
 
-            d_coords = div_coords(red_average_coords, Ms)
-            x = [i[0] for i in d_coords]
-            y = [i[1] for i in d_coords]
-            plt.plot(x, y, lw=2)
-            plt.title('Rebuilt graph (secondary)')
-            plt.xlabel('H, kOe')
-            plt.ylabel('M, emu/g')
-            plt.grid(True)
-            plt.show()
+                curve_square = evaluate_square(red_average_coords, green_average_coords)
 
-            inv_h_coords = recalculate_h(red_average_coords)
-            x = [i[0] for i in inv_h_coords]
-            y = [i[1] for i in inv_h_coords]
-            plt.plot(x, y, lw=2)
-            plt.title('Rebuilt graph (secondary)')
-            plt.xlabel('H, kOe')
-            plt.ylabel('M, emu/g')
-            plt.grid(True)
-            plt.show()
+                params.append(Ms)
+                params.append(red_Mr)
+                params.append(red_Hc)
+                params.append(green_Mr)
+                params.append(green_Hc)
+                params.append(curve_square)
 
-            if red_average_coords and green_average_coords is not None:
-                save_to_excel(red_average_coords, green_average_coords, d_coords, inv_h_coords, params, image_name)
+                print(f"Ms: {Ms}")
+                print(f"Msmin: {Msmin}")
+                if red_Mr:
+                    print(f"red_Mr: {red_Mr}")
+                if red_Hc:
+                    print(f"red_Hc: {red_Hc}")
+                if green_Mr:
+                    print(f"green_Mr: {green_Mr}")
+                if green_Hc:
+                    print(f"green_Hc: {green_Hc}")
+                print(f"Square:{curve_square}")
+
+                red_d_coords = div_coords(red_average_coords, Ms)
+                green_d_coords = div_coords(green_average_coords, Ms)
+
+                red_inv_h_coords = recalculate_h(red_average_coords)
+                green_inv_h_coords = recalculate_h(green_average_coords)
+
+                # Plotting derivatives and recalculated 1/h
+                fig, ax2 = plt.subplots(1, 2, figsize=(12, 6))
+
+                # Plot derivatives
+                x = [i[0] for i in red_d_coords]
+                y = [i[1] for i in red_d_coords]
+                ax2[0].plot(x, y, color='red', lw=2, label='Main curve')
+                x = [i[0] for i in green_d_coords]
+                y = [i[1] for i in green_d_coords]
+                ax2[0].plot(x, y, color='green', lw=2, label='Secondary curve')
+                ax2[0].set_title('δM/Ms')
+                ax2[0].set_xlabel('H, kOe')
+                ax2[0].set_ylabel('M')
+                ax2[0].grid(True)
+                ax2[0].legend()
+
+                # Plot recalculated 1/h
+                x = [i[0] for i in red_inv_h_coords]
+                y = [i[1] for i in red_inv_h_coords]
+                ax2[1].plot(x, y, color='red', lw=2, label='Main curve')
+                x = [i[0] for i in green_inv_h_coords]
+                y = [i[1] for i in green_inv_h_coords]
+                ax2[1].plot(x, y, color='green', lw=2, label='Secondary curve')
+                ax2[1].set_title('M(1/H)')
+                ax2[1].set_xlabel('1/H, 1/kOe')
+                ax2[1].set_ylabel('M, emu/g')
+                ax2[1].grid(True)
+                ax2[1].legend()
+
+                plt.tight_layout()
+                plt.show()
+
+                if red_average_coords and green_average_coords is not None:
+                    try:
+                        save_to_excel(red_average_coords, green_average_coords, red_d_coords, red_inv_h_coords, params,
+                                      image_name)
+                    except Exception as e:
+                        self.log_message(f"Error saving to excel: {e}")
+                self.log_message("\nSaved successfully")
+
+                self.log_message("")
+                self.log_message(f"Ms: {Ms}")
+                self.log_message(f"Msmin: {Msmin}")
+                self.log_message(f"red_Mr: {red_Mr}")
+                self.log_message(f"red_Hc: {red_Hc}")
+                self.log_message(f"green_Mr: {green_Mr}")
+                self.log_message(f"green_Hc: {green_Hc}")
+                self.log_message(f"Square:{curve_square}")
+                self.log_message("")
         except Exception as e:
-            self.log_message(f"Ошибка при анализе данных: {e}")
+            self.log_message(f"Error analysing graph: {e}")
 
     def log_message(self, message):
         self.main_window_text_browser.append(message)

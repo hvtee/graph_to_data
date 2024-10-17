@@ -20,21 +20,21 @@ def extract_curve(image_path):
     red_mask_2 = cv2.inRange(hsv_image, red_border_low_2, red_border_high_2)
     red_mask_result = cv2.bitwise_or(red_mask_1, red_mask_2)
     red_only_image = cv2.bitwise_and(image, image, mask=red_mask_result)
-    plt.imshow(red_only_image)
-    plt.show()
+    # plt.imshow(red_only_image)
+    # plt.show()
 
     green_border_low = np.array([35, 25, 25])
     green_border_high = np.array([85, 255, 255])
     green_mask = cv2.inRange(hsv_image, green_border_low, green_border_high)
     green_only_image = cv2.bitwise_and(image, image, mask=green_mask)
-    plt.imshow(green_only_image)
-    plt.show()
+    # plt.imshow(green_only_image)
+    # plt.show()
 
     red_gray_image = cv2.cvtColor(red_only_image, cv2.COLOR_BGR2GRAY)
     _, red_thresh_image = cv2.threshold(red_gray_image, 30, 255, cv2.THRESH_BINARY)
     red_contours, _ = cv2.findContours(red_thresh_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    plt.imshow(red_gray_image)
-    plt.show()
+    # plt.imshow(red_gray_image)
+    # plt.show()
 
     green_gray_image = cv2.cvtColor(green_only_image, cv2.COLOR_BGR2GRAY)
     _, green_thresh_image = cv2.threshold(green_gray_image, 30, 255, cv2.THRESH_BINARY)
@@ -60,12 +60,6 @@ def pixel_to_real_coordinates(pixel_coords, x_range, y_range, img_shape):
         y_real = y_min + (y_pixel / height) * (y_max - y_min)
 
         real_coords.append([x_real, -y_real])
-
-    sorted_real_coords = sorted(real_coords, key=lambda x: x[0])
-    print(real_coords)
-    print("\n\n\n\n\n\n")
-    print(sorted_real_coords)
-
     return np.array(real_coords)
 
 
@@ -109,20 +103,6 @@ def average_curve(coords):
     return new_coords
 
 
-# def fit_polynomial(coords, degree=3):
-#     # Разбиваем координаты на x и y
-#     x_vals = [x for x, y in coords]
-#     y_vals = [y for x, y in coords]
-#
-#     # Получаем коэффициенты полинома
-#     poly_coeffs = np.polyfit(x_vals, y_vals, degree)
-#
-#     # Возвращаем функцию полинома
-#     poly_func = np.poly1d(poly_coeffs)
-#
-#     return poly_func
-
-
 def evaluate_square(red_curve_coords, green_curve_coords):
     red_x_vals = [x for x, y in red_curve_coords]
     red_y_vals = [y for x, y in red_curve_coords]
@@ -160,8 +140,8 @@ def find_closest_point(coords, target_x=None, target_y=None):
     return None
 
 
-def save_to_excel(red_data, green_data, div_data, inv_h_data, other_data, file_path='data/hysteresis-loop-',
-                  img_name=""):
+def save_to_excel(red_data, green_data, div_data, inv_h_data, other_data,
+                  img_name):
     df_red = pd.DataFrame({
         'H': [x for x, y in red_data],
         'M': [y for x, y in red_data],
@@ -175,7 +155,7 @@ def save_to_excel(red_data, green_data, div_data, inv_h_data, other_data, file_p
     })
 
     time_string = time.strftime("%d.%m.%Y-%H.%M.%S")
-    file_path = file_path + f"{img_name}" + f"{time_string}" + ".xlsx"
+    file_path = "data/hysteresis-loop-" + f"{img_name}-" + f"{time_string}" + ".xlsx"
 
     with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
         df_combined = pd.concat([df_red, df_green], axis=1)
@@ -196,12 +176,11 @@ def save_to_excel(red_data, green_data, div_data, inv_h_data, other_data, file_p
         params_ws.append(["Parameter", "Value"])
 
         # Параметры, такие как Ms, Hc
-        param_names = ['Ms', 'Mr', 'Hc', 'S']
+        param_names = ['Ms', 'red_Mr', 'red_Hc', 'green_Mr', 'green_Hc', 'S']
         for name, value in zip(param_names, other_data):
             params_ws.append([name, value])
 
     print(f"Data saved into: {file_path}")
-
 
 # def analyse_graph():
 #     image_path = 'graphs/loop_3.jpg'
@@ -290,6 +269,3 @@ def save_to_excel(red_data, green_data, div_data, inv_h_data, other_data, file_p
 #
 #     if red_average_coords and green_average_coords is not None:
 #         save_to_excel(red_average_coords, green_average_coords, d_coords, inv_h_coords, params, image_name)
-
-
-
