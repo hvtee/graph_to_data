@@ -6,9 +6,10 @@ from PyQt5.QtCore import QSize, QRect, QMetaObject, QCoreApplication
 from PyQt5.QtWidgets import QSizePolicy, QAction, QWidget, QGridLayout, QPushButton, QTextBrowser, QMenuBar, QMenu, \
     QStatusBar, QMainWindow
 from matplotlib import pyplot as plt
+from scipy.interpolate import CubicSpline
 
 from funcs import evaluate_curve, average_curve, find_closest_point, evaluate_square, div_coords, recalculate_h, \
-    save_to_excel
+    save_to_excel, interpolate_average_coords
 from ui.add_graph_window import Add_Graph_Window
 
 
@@ -118,6 +119,9 @@ class Main_Window(QMainWindow):
                 red_average_coords = average_curve(red_sorted_coords)
                 green_average_coords = average_curve(green_sorted_coords)
 
+                red_interpolated_coords = interpolate_average_coords(red_average_coords)
+                green_interpolated_coords = interpolate_average_coords(green_average_coords)
+
                 # Plotting the original graph and the combined curves
                 fig, ax = plt.subplots(1, 2, figsize=(12, 6))
 
@@ -179,21 +183,34 @@ class Main_Window(QMainWindow):
                     print(f"green_Hc: {green_Hc}")
                 print(f"Square:{curve_square}")
 
-                red_d_coords = div_coords(red_average_coords, Ms)
-                green_d_coords = div_coords(green_average_coords, Ms)
+                red_div_coords = div_coords(red_average_coords, Ms)
+                green_div_coords = div_coords(green_average_coords, Ms)
 
-                red_inv_h_coords = recalculate_h(red_average_coords)
-                green_inv_h_coords = recalculate_h(green_average_coords)
+                # M(1/H)
+                red_M_1dH = recalculate_h(red_average_coords, -1)
+                green_M_1dH = recalculate_h(green_average_coords, -1)
+
+                # M-Ms(1/H^1/2)
+                red_M_Ms_1dsqH = recalculate_h(red_average_coords, -1 / 2, Ms, False)
+                green_M_Ms_1dsqH = recalculate_h(green_average_coords, -1 / 2, Ms, False)
+
+                # M-Ms(1/H^1)
+                red_M_Ms_1dH = recalculate_h(red_average_coords, -1, Ms, False)
+                green_M_Ms_1dH = recalculate_h(green_average_coords, -1, Ms, False)
+
+                # M-Ms(1/H^2)
+                red_M_Ms_1dHp2 = recalculate_h(red_average_coords, -2, Ms, False)
+                green_M_Ms_1dHp2 = recalculate_h(green_average_coords, -2, Ms, False)
 
                 # Plotting derivatives and recalculated 1/h
                 fig, ax2 = plt.subplots(1, 2, figsize=(12, 6))
 
                 # Plot derivatives
-                x = [i[0] for i in red_d_coords]
-                y = [i[1] for i in red_d_coords]
+                x = [i[0] for i in red_div_coords]
+                y = [i[1] for i in red_div_coords]
                 ax2[0].plot(x, y, color='red', lw=2, label='Main curve')
-                x = [i[0] for i in green_d_coords]
-                y = [i[1] for i in green_d_coords]
+                x = [i[0] for i in green_div_coords]
+                y = [i[1] for i in green_div_coords]
                 ax2[0].plot(x, y, color='green', lw=2, label='Secondary curve')
                 ax2[0].set_title('δM/Ms')
                 ax2[0].set_xlabel('H, kOe')
@@ -201,12 +218,12 @@ class Main_Window(QMainWindow):
                 ax2[0].grid(True)
                 ax2[0].legend()
 
-                # Plot recalculated 1/h
-                x = [i[0] for i in red_inv_h_coords]
-                y = [i[1] for i in red_inv_h_coords]
+                # Plot recalculated M(1/H)
+                x = [i[0] for i in red_M_1dH]
+                y = [i[1] for i in red_M_1dH]
                 ax2[1].plot(x, y, color='red', lw=2, label='Main curve')
-                x = [i[0] for i in green_inv_h_coords]
-                y = [i[1] for i in green_inv_h_coords]
+                x = [i[0] for i in green_M_1dH]
+                y = [i[1] for i in green_M_1dH]
                 ax2[1].plot(x, y, color='green', lw=2, label='Secondary curve')
                 ax2[1].set_title('M(1/H)')
                 ax2[1].set_xlabel('1/H, 1/kOe')
@@ -214,16 +231,62 @@ class Main_Window(QMainWindow):
                 ax2[1].grid(True)
                 ax2[1].legend()
 
+                # Plotting M/Ms(H)
+                fig, ax3 = plt.subplots(1, 3, figsize=(12, 6))
+
+                # M-Ms(1/H^(1/2))
+                x = [i[0] for i in red_M_Ms_1dsqH]
+                y = [i[1] for i in red_M_Ms_1dsqH]
+                ax3[0].plot(x, y, color='red', lw=2, label='Main curve')
+                x = [i[0] for i in green_M_Ms_1dsqH]
+                y = [i[1] for i in green_M_Ms_1dsqH]
+                ax3[0].plot(x, y, color='green', lw=2, label='Secondary curve')
+                ax3[0].set_title('δM/Ms(1/H^(1/2))')
+                ax3[0].set_xlabel('1/H^(1/2), (kOe)^(-1/2)')
+                ax3[0].set_ylabel('δM/Ms, emu/g')
+                ax3[0].grid(True)
+                ax3[0].legend()
+
+                # Plot recalculated M/Ms(1/H^1)
+                x = [i[0] for i in red_M_Ms_1dH]
+                y = [i[1] for i in red_M_Ms_1dH]
+                ax3[1].plot(x, y, color='red', lw=2, label='Main curve')
+                x = [i[0] for i in green_M_Ms_1dH]
+                y = [i[1] for i in green_M_Ms_1dH]
+                ax3[1].plot(x, y, color='green', lw=2, label='Secondary curve')
+                ax3[1].set_title('δM/Ms(1/H^1)')
+                ax3[1].set_xlabel('1/H, 1/kOe')
+                ax3[1].set_ylabel('δM/Ms, emu/g')
+                ax3[1].grid(True)
+                ax3[1].legend()
+
+                # Plot recalculated  M/Ms(1/H^2)
+                x = [i[0] for i in red_M_Ms_1dHp2]
+                y = [i[1] for i in red_M_Ms_1dHp2]
+                ax3[2].plot(x, y, color='red', lw=2, label='Main curve')
+                x = [i[0] for i in green_M_Ms_1dHp2]
+                y = [i[1] for i in green_M_Ms_1dHp2]
+                ax3[2].plot(x, y, color='green', lw=2, label='Secondary curve')
+                ax3[2].set_title('δM/Ms(1/H^2)')
+                ax3[2].set_xlabel('1/H^2, 1/kOe^2')
+                ax3[2].set_ylabel('δM/Ms, emu/g')
+                ax3[2].grid(True)
+                ax3[2].legend()
+
                 plt.tight_layout()
                 plt.show()
 
+                rec_m_h = [red_M_Ms_1dsqH, green_M_Ms_1dsqH, red_M_Ms_1dH, green_M_Ms_1dH, red_M_Ms_1dHp2,
+                           green_M_Ms_1dHp2]
+
                 if red_average_coords and green_average_coords is not None:
                     try:
-                        save_to_excel(red_average_coords, green_average_coords, red_d_coords, red_inv_h_coords, params,
+                        save_to_excel(red_average_coords, green_average_coords, red_div_coords, red_M_1dH, rec_m_h,
+                                      params,
                                       image_name)
+                        self.log_message(f"\n \'{image_name}\' saved successfully")
                     except Exception as e:
-                        self.log_message(f"Error saving to excel: {e}")
-                self.log_message("\nSaved successfully")
+                        self.log_message(f"\nError saving to excel: {e}")
 
                 self.log_message("")
                 self.log_message(f"Ms: {Ms}")

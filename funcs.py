@@ -39,8 +39,8 @@ def extract_curve(image_path):
     green_gray_image = cv2.cvtColor(green_only_image, cv2.COLOR_BGR2GRAY)
     _, green_thresh_image = cv2.threshold(green_gray_image, 30, 255, cv2.THRESH_BINARY)
     green_contours, _ = cv2.findContours(green_thresh_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    plt.imshow(green_gray_image)
-    plt.show()
+    # plt.imshow(green_gray_image)
+    # plt.show()
 
     return red_contours, green_contours, image
 
@@ -103,6 +103,33 @@ def average_curve(coords):
     return new_coords
 
 
+def interpolate_average_coords(sorted_coords, num_points=1000):
+    """
+    Интерполирует данные, создавая новые точки в пределах заданного диапазона.
+    :param sorted_coords: Список координат для интерполяции.
+    :param num_points: Количество новых точек.
+    :return: Интерполированные координаты.
+    """
+    try:
+
+        x_vals = [coord[0] for coord in sorted_coords]
+        y_vals = [coord[1] for coord in sorted_coords]
+
+        spline = CubicSpline(x_vals, y_vals)
+
+        new_x_vals = np.linspace(min(x_vals), max(x_vals), num_points)
+
+        # Вычисляем новые y значения по функции сплайна
+        new_y_vals = spline(new_x_vals)
+
+        interpolated_coords = list(zip(new_x_vals, new_y_vals))
+        return interpolated_coords
+
+    except Exception as e:
+        self.log_message(f"Error interpolating coords: {e}")
+        return []
+
+
 def evaluate_square(red_curve_coords, green_curve_coords):
     red_x_vals = [x for x, y in red_curve_coords]
     red_y_vals = [y for x, y in red_curve_coords]
@@ -128,8 +155,11 @@ def div_coords(coords, max_y):
     return [(x, (y - max_y) / max_y) for x, y in coords]
 
 
-def recalculate_h(coords):
-    return [(1 / x, y) for x, y in coords]
+def recalculate_h(coords, power=1, Ms=1, crop=False):
+    if not crop:
+        return [(pow(x, power), abs((y - Ms) / Ms)) for x, y in coords]
+    else:
+        return [(pow(x, power), abs((y - Ms) / Ms)) for x, y in coords if 0.1 <= x <= 1]
 
 
 def find_closest_point(coords, target_x=None, target_y=None):
@@ -140,7 +170,22 @@ def find_closest_point(coords, target_x=None, target_y=None):
     return None
 
 
-def save_to_excel(red_data, green_data, div_data, inv_h_data, other_data,
+def print_graph(red_coords, green_coords, x_label, y_label):
+    fig, ax = plt.subplots(1, 3, figsize=(12, 6))
+    x = [i[0] for i in red_coords]
+    y = [i[1] for i in red_coords]
+    ax[0].plot(x, y, color='red', lw=2, label='Main curve')
+    x = [i[0] for i in green_coords]
+    y = [i[1] for i in green_coords]
+    ax[0].plot(x, y, color='green', lw=2, label='Secondary curve')
+    ax[0].set_title(f"{y_label}" + f"({x_label})")
+    ax[0].set_xlabel(x_label)
+    ax[0].set_ylabel(y_label)
+    ax[0].grid(True)
+    ax[0].legend()
+
+
+def save_to_excel(red_data, green_data, div_data, inv_h_data, recalculated_h_data, other_data,
                   img_name):
     df_red = pd.DataFrame({
         'H': [x for x, y in red_data],
@@ -154,11 +199,18 @@ def save_to_excel(red_data, green_data, div_data, inv_h_data, other_data,
         'M': [y for x, y in green_data]
     })
 
+    df_recalculated = pd.DataFrame({
+        "green_δM/Ms": [y for x, y in recalculated_h_data[1]],
+        "green_1/H^1/2": [x for x, y in recalculated_h_data[1]],
+        "green_1/H^1": [x for x, y in recalculated_h_data[3]],
+        "green_1/H^2": [x for x, y in recalculated_h_data[5]]
+    })
+
     time_string = time.strftime("%d.%m.%Y-%H.%M.%S")
     file_path = "data/hysteresis-loop-" + f"{img_name}-" + f"{time_string}" + ".xlsx"
 
     with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
-        df_combined = pd.concat([df_red, df_green], axis=1)
+        df_combined = pd.concat([df_red, df_green, df_recalculated], axis=1)
         df_combined.to_excel(writer, sheet_name='Data', startrow=2, index=False)
 
         workbook = writer.book
